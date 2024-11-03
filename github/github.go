@@ -3,12 +3,12 @@ package github
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"log"
 	"net/http"
 
 	"github.com/schedule-job/schedule-job-authorization/core"
+	schedule_errors "github.com/schedule-job/schedule-job-errors"
 )
 
 func (g *Github) getAccessToken(code string) (string, error) {
@@ -22,15 +22,17 @@ func (g *Github) getAccessToken(code string) (string, error) {
 	body, errMarshal := json.Marshal(payload)
 
 	if errMarshal != nil {
-		log.Fatalln(errMarshal.Error())
-		return "", errMarshal
+		err := schedule_errors.InvalidArgumentError{Param: "payload", Message: errMarshal.Error()}
+		log.Fatalln(err.Error())
+		return "", &err
 	}
 
 	req, errReq := http.NewRequest("POST", g.GithubAccessTokenAPI, bytes.NewReader(body))
 
 	if errReq != nil {
-		log.Fatalln(errReq.Error())
-		return "", errReq
+		err := schedule_errors.ConnectionError{Address: g.GithubAccessTokenAPI, Reason: errReq.Error()}
+		log.Fatalln(err.Error())
+		return "", &err
 	}
 
 	req.Header.Set("Accept", "application/json")
@@ -40,8 +42,9 @@ func (g *Github) getAccessToken(code string) (string, error) {
 	res, errRes := client.Do(req)
 
 	if errRes != nil {
-		log.Fatalln(errRes.Error())
-		return "", errRes
+		err := schedule_errors.ConnectionError{Address: g.GithubAccessTokenAPI, Reason: errRes.Error()}
+		log.Fatalln(err.Error())
+		return "", &err
 	}
 
 	defer res.Body.Close()
@@ -50,13 +53,15 @@ func (g *Github) getAccessToken(code string) (string, error) {
 	errDecode := json.NewDecoder(res.Body).Decode(&userData)
 
 	if errDecode != nil {
-		log.Fatalln(errDecode.Error())
-		return "", errDecode
+		err := schedule_errors.InternalServerError{Err: errDecode}
+		log.Fatalln(err.Error())
+		return "", &err
 	}
 
 	if userData["error"] != "" && userData["error"] != nil {
-		log.Fatalln(userData["error_description"].(string) + " more info : " + userData["error_uri"].(string))
-		return "", errors.New(userData["error_description"].(string) + " more info : " + userData["error_uri"].(string))
+		err := schedule_errors.UnauthorizedError{Reason: userData["error_description"].(string) + " more info : " + userData["error_uri"].(string)}
+		log.Fatalln(err)
+		return "", &err
 	}
 
 	return userData["access_token"].(string), nil
@@ -66,8 +71,9 @@ func (g *Github) getUser(accessToken string) (*core.User, error) {
 	req, errReq := http.NewRequest("GET", g.GithubUserAPI, nil)
 
 	if errReq != nil {
-		log.Fatalln(errReq.Error())
-		return nil, errReq
+		err := schedule_errors.ConnectionError{Address: g.GithubAccessTokenAPI, Reason: errReq.Error()}
+		log.Fatalln(err.Error())
+		return nil, &err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
@@ -76,15 +82,17 @@ func (g *Github) getUser(accessToken string) (*core.User, error) {
 	res, errRes := client.Do(req)
 
 	if errRes != nil {
-		log.Fatalln(errRes.Error())
-		return nil, errRes
+		err := schedule_errors.ConnectionError{Address: g.GithubAccessTokenAPI, Reason: errRes.Error()}
+		log.Fatalln(err.Error())
+		return nil, &err
 	}
 
 	read, errRead := io.ReadAll(res.Body)
 
 	if errRead != nil {
-		log.Fatalln(errRead.Error())
-		return nil, errRead
+		err := schedule_errors.InternalServerError{Err: errRead}
+		log.Fatalln(err.Error())
+		return nil, &err
 	}
 
 	user := core.User{}
@@ -92,8 +100,9 @@ func (g *Github) getUser(accessToken string) (*core.User, error) {
 	errParse := json.Unmarshal(read, &user)
 
 	if errParse != nil {
-		log.Fatalln(errParse.Error())
-		return nil, errParse
+		err := schedule_errors.InternalServerError{Err: errParse}
+		log.Fatalln(err.Error())
+		return nil, &err
 	}
 
 	return &user, nil
@@ -103,7 +112,6 @@ func (g *Github) GetUser(code string) (*core.User, error) {
 	accessToken, errAccessToken := g.getAccessToken(code)
 
 	if errAccessToken != nil {
-		log.Fatalln(errAccessToken.Error())
 		return nil, errAccessToken
 	}
 

@@ -1,21 +1,28 @@
 package core
 
 import (
-	"errors"
 	"log"
+
+	schedule_errors "github.com/schedule-job/schedule-job-errors"
 )
 
-func (o *OAuth) AddProvider(name string, provider OAuthInterface) {
+func (o *OAuth) AddProvider(name string, provider OAuthInterface) error {
 	if o.providers == nil {
 		o.providers = make(map[string]OAuthInterface)
 	}
+
 	if o.providers[name] != nil {
-		panic("already using name")
+		err := schedule_errors.DuplicateNameError{Name: name}
+		log.Fatalln(err.Error())
+		return &err
 	}
+
 	o.providers[name] = provider
+
+	return nil
 }
 
-func (o *OAuth) GetProviders() ([]Provider, error) {
+func (o *OAuth) GetProviders() []Provider {
 	if o.providers == nil {
 		o.providers = make(map[string]OAuthInterface)
 	}
@@ -26,7 +33,7 @@ func (o *OAuth) GetProviders() ([]Provider, error) {
 		providers = append(providers, Provider{Name: name, LoginUrl: provider.GetLoginUrl()})
 	}
 
-	return providers, nil
+	return providers
 }
 
 func (o *OAuth) GetLoginUrl(name string) (string, error) {
@@ -35,8 +42,9 @@ func (o *OAuth) GetLoginUrl(name string) (string, error) {
 	}
 
 	if o.providers[name] == nil {
-		log.Fatalln("no such provider")
-		return "", errors.New("no such provider")
+		err := schedule_errors.UnsupportedFeatureError{Feature: name}
+		log.Fatalln(err.Error())
+		return "", &err
 	}
 
 	return o.providers[name].GetLoginUrl(), nil
@@ -48,8 +56,9 @@ func (o *OAuth) GetUser(name string, code string) (*User, error) {
 	}
 
 	if o.providers[name] == nil {
-		log.Fatalln("no such provider")
-		return nil, errors.New("no such provider")
+		err := schedule_errors.UnsupportedFeatureError{Feature: name}
+		log.Fatalln(err.Error())
+		return nil, &err
 	}
 
 	return o.providers[name].GetUser(code)
